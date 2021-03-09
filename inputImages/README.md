@@ -1,0 +1,1 @@
+Place all the images to be stitched in this directory.
