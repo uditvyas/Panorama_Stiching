@@ -24,50 +24,166 @@ def valid_matches(matches, lowe_ratio=0.8):
 
     for k_match in matches:
         if len(k_match) == 2 and k_match[0].distance < k_match[1].distance * lowe_ratio:
-            # valid_matches.append((k_match[0].trainIdx, k_match[0].queryIdx))
             valid_matches.append(k_match[0])
     return valid_matches
 
 
-def correspondence_matrix(valid_matches, keypoints0, keypoints1):
+def correspondence_matrix(valid_matches, ref_keypoints, tar_keypoints):
     keypoints = []
 
     for match in valid_matches:
-        (x0, y0) = keypoints0[match.queryIdx].pt
-        (x1, y1) = keypoints1[match.trainIdx].pt
+        (x0, y0) = ref_keypoints[match.queryIdx].pt
+        (x1, y1) = tar_keypoints[match.trainIdx].pt
         keypoints.append([x0, y0, x1, y1])
 
-    keypoint_matrix = np.matrix(keypoints)
-    return keypoint_matrix
+    return keypoints
+
 
 def calcH(sample):
-    return 0
+    A = []
+    for x, y, xx, yy in sample:
 
-def geometricDistance(matrixList, H):
-    return 0
+        first = [x, y, 1, 0, 0, 0, -xx*x, -xx*y, -xx]
+        second = [0, 0, 0, x, y, 1, -yy*x, -yy*y, -yy]
 
-def get_homography(matrix, threshold, n_iter=500):
+        A.append(first)
+        A.append(second)
+
+    A = np.matrix(A)
+    U, S, V = np.linalg.svd(A)
+
+    H = np.reshape(V[8], (3, 3))
+    # Normalising
+    H = (1/H[2, 2])*H
+    return H
+
+
+def findError(matrixRow, H):
+    point1 = np.transpose(np.array([matrixRow[0], matrixRow[1], 1]))
+    point2 = np.array([matrixRow[2], matrixRow[3], 1])
+    estimate = np.dot(H, point1)
+    estimate = estimate/estimate[0, 2]
+    error = point2 - estimate
+    return np.linalg.norm(error)
+
+
+def get_homography(matrix, threshold, n_iter=2000):
     inliers = []
     n = len(matrix)
+    finalH = None
     for i in range(n_iter):
-        random1 = matrix[random.randrange(0, n)]
-        random2 = matrix[random.randrange(0, n)]
-        random3 = matrix[random.randrange(0, n)]
-        random4 = matrix[random.randrange(0, n)]
-        random_sample = np.vstack((random1, random2, random3, random4))
+        indices = random.sample(range(1, n), 4)
+        random_sample = [matrix[i] for i in indices]
 
         H = calcH(random_sample)
         iteration_inliers = []
 
         for i in range(n):
-            d = geometricDistance(matrix[i], H)
-            if d < 5:
+            error = findError(matrix[i], H)
+            if error < 2:
                 iteration_inliers.append(matrix[i])
 
         if len(iteration_inliers) > len(inliers):
             inliers = iteration_inliers
             finalH = H
 
-        if len(inliers) > len(matrix)*threshold:
-            break
-    return 0,0
+        # if len(inliers) > len(matrix)*threshold:
+        #     break
+    return finalH  # inliers
+
+
+def warpimage(image1, image2, x_offset, y_offset, x, y, H12):
+
+    img1 = image1
+    img2 = image2
+
+    img_temp = np.zeros((x, y, 3))
+
+    for i in range(img1.shape[0]):
+        for j in range(img1.shape[1]):
+            # img_temp[i+x_offset][j+y_offset] = img1[i][j]
+            img_temp[i+x_offset][j+y_offset] = img1[i][j]
+
+    for i in range(img1.shape[0]):
+        for j in range(img1.shape[1]):
+            point = np.array([j, i, 1])
+            estimate = np.dot(H12, point)
+            x_c = int(estimate[0, 0])
+            y_c = int(estimate[0, 1])
+            try:
+                for i1 in range(-1, 2):
+                    for i2 in range(-1, 2):
+                        img_temp[y_c+x_offset+i1][x_c+i2] = img2[i, j]
+            except:
+                continue
+    return img_temp
+
+
+def stich(reference, target):
+    (reference_keypoints, reference_features) = extract_features_keypoints(reference)
+    (target_keypoints, target_features) = extract_features_keypoints(target)
+    all_matches = match_features(reference_features, target_features)
+    good_matches = valid_matches(all_matches)
+    keypoint_matrix = correspondence_matrix(
+        good_matches, reference_keypoints, target_keypoints)
+    threshold = 1
+
+    H = get_homography(keypoint_matrix, threshold)
+    return H
+
+
+def warp(image1, image2, image3, image4,  x_offset, y_offset, x, y, H12, H32, H42):
+
+    img1 = image1
+    img2 = image2
+    img3 = image3
+    img4 = image4
+
+    img_temp = np.zeros((x, y, 3))
+
+    for i in range(img1.shape[0]):
+        for j in range(img1.shape[1]):
+            img_temp[i+x_offset][j+y_offset] = img2[i][j]
+
+    for i in range(img1.shape[0]):
+        for j in range(img1.shape[1]):
+            computed = H12.dot(np.asarray([j, i, 1]).T)
+            computed = computed/computed[0, 2]
+            x_c = int(computed[0, 0])
+            y_c = int(computed[0, 1])
+            try:
+                for i1 in range(-1, 2):
+                    for i2 in range(-1, 2):
+                        img_temp[y_c+x_offset+i1][x_c+y_offset+i2] = img1[i, j]
+            except:
+                continue
+
+    for i in range(img1.shape[0]):
+        for j in range(img1.shape[1]):
+            computed = H32.dot(np.asarray([j, i, 1]).T)
+            computed = computed/computed[0, 2]
+            x_c = int(computed[0, 0])
+            y_c = int(computed[0, 1])
+            try:
+                for i1 in range(-1, 2):
+                    for i2 in range(-1, 2):
+                        img_temp[y_c+x_offset+i1][x_c+y_offset+i2] = img3[i, j]
+            except:
+                continue
+
+    for i in range(img1.shape[0]):
+        for j in range(img1.shape[1]):
+            computed = H42.dot(np.asarray([j, i, 1]).T)
+            computed = computed/computed[0, 2]
+            x_c = int(computed[0, 0])
+            y_c = int(computed[0, 1])
+            try:
+                for i1 in range(-2, 3):
+                    for i2 in range(-2, 3):
+                        img_temp[y_c+x_offset+i1][x_c+y_offset+i2] = img4[i, j]
+            except:
+                continue
+
+    img_temp = img_temp.astype(np.uint8)
+
+    return img_temp

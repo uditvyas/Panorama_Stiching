@@ -1,23 +1,20 @@
 # This file contains the driver code for Panorama Stitching
 from helpers import *
 
-image0 = cv2.imread("inputImages/I2/2_1.JPG")
 image1 = cv2.imread("inputImages/I2/2_2.JPG")
+image2 = cv2.imread("inputImages/I2/2_3.JPG")
+image3 = cv2.imread("inputImages/I2/2_4.JPG")
+image4 = cv2.imread("inputImages/I2/2_5.JPG")
 
-# Using ORB
-(keypoints0, features0) = extract_features_keypoints(image0)
-(keypoints1, features1) = extract_features_keypoints(image1)
+# Assuming we take image 2 as the reference image, we transfxorm rest all images to Image 2's perpective
 
-# Using KNN Matching, with default K = 2
-all_matches = match_features(features0, features1)
+H12 = stich(image1, image2)
+H32 = stich(image3, image2)
+H43 = stich(image4, image3)
+H42 = np.dot(H43, H32)
 
-# Using Lowe's Ratio, with default ratio = 0.8
-valid_matches = valid_matches(all_matches)
+val = image2.shape[1] + image1.shape[1]
 
-keypoint_matrix = correspondence_matrix(
-    valid_matches, keypoints0, keypoints1)
-
-sigma = 1
-threshold = np.sqrt(5.99) * sigma
-
-H, inliers = get_homography(keypoint_matrix, threshold)
+output = warp(image1, image2, image3, image4, int(0.15*image1.shape[0]),
+              image1.shape[1], int(1.3*image1.shape[0]), 4*image1.shape[1], H12, H32, H42)
+cv2.imwrite("panorama.png", output)
