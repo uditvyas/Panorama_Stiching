@@ -67,7 +67,7 @@ def findError(matrixRow, H):
     return np.linalg.norm(error)
 
 
-def get_homography(matrix, threshold, n_iter=2000):
+def get_homography(matrix, threshold, n_iter=3000):
     inliers = []
     n = len(matrix)
     finalH = None
@@ -131,59 +131,37 @@ def stich(reference, target):
     H = get_homography(keypoint_matrix, threshold)
     return H
 
+def setReference(image, x_offset, y_offset, x, y):
+    warped = np.zeros((x, y, 3))
+    for i in range(image.shape[0]):
+        for j in range(image.shape[1]):
+            warped[i+x_offset][j+y_offset] = image[i][j]
+    return warped
 
-def warp(image1, image2, image3, image4,  x_offset, y_offset, x, y, H12, H32, H42):
 
-    img1 = image1
-    img2 = image2
-    img3 = image3
-    img4 = image4
-
-    img_temp = np.zeros((x, y, 3))
-
-    for i in range(img1.shape[0]):
-        for j in range(img1.shape[1]):
-            img_temp[i+x_offset][j+y_offset] = img2[i][j]
-
-    for i in range(img1.shape[0]):
-        for j in range(img1.shape[1]):
-            computed = H12.dot(np.asarray([j, i, 1]).T)
+def mywarp(output, target, x_offset, y_offset, H):
+    for i in range(target.shape[0]):
+        for j in range(target.shape[1]):
+            computed = H.dot(np.asarray([j, i, 1]).T)
             computed = computed/computed[0, 2]
             x_c = int(computed[0, 0])
             y_c = int(computed[0, 1])
             try:
                 for i1 in range(-1, 2):
                     for i2 in range(-1, 2):
-                        img_temp[y_c+x_offset+i1][x_c+y_offset+i2] = img1[i, j]
+                        output[y_c+x_offset+i1][x_c + y_offset+i2] = target[i, j]
             except:
                 continue
-
-    for i in range(img1.shape[0]):
-        for j in range(img1.shape[1]):
-            computed = H32.dot(np.asarray([j, i, 1]).T)
-            computed = computed/computed[0, 2]
-            x_c = int(computed[0, 0])
-            y_c = int(computed[0, 1])
-            try:
-                for i1 in range(-1, 2):
-                    for i2 in range(-1, 2):
-                        img_temp[y_c+x_offset+i1][x_c+y_offset+i2] = img3[i, j]
-            except:
-                continue
-
-    for i in range(img1.shape[0]):
-        for j in range(img1.shape[1]):
-            computed = H42.dot(np.asarray([j, i, 1]).T)
+def mywarp_far(output, target, x_offset, y_offset, H):
+    for i in range(target.shape[0]):
+        for j in range(target.shape[1]):
+            computed = H.dot(np.asarray([j, i, 1]).T)
             computed = computed/computed[0, 2]
             x_c = int(computed[0, 0])
             y_c = int(computed[0, 1])
             try:
                 for i1 in range(-2, 3):
                     for i2 in range(-2, 3):
-                        img_temp[y_c+x_offset+i1][x_c+y_offset+i2] = img4[i, j]
+                        output[y_c+x_offset+i1][x_c + y_offset+i2] = target[i, j]
             except:
                 continue
-
-    img_temp = img_temp.astype(np.uint8)
-
-    return img_temp
