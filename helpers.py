@@ -3,6 +3,7 @@
 import cv2
 import numpy as np
 import random
+from tqdm import tqdm
 # Part 1: Detect, extract, and match features
 
 
@@ -67,11 +68,11 @@ def findError(matrixRow, H):
     return np.linalg.norm(error)
 
 
-def get_homography(matrix, threshold, n_iter=3000):
+def get_homography(matrix, threshold, n_iter=500):
     inliers = []
     n = len(matrix)
     finalH = None
-    for i in range(n_iter):
+    for i in tqdm(range(n_iter)):
         indices = random.sample(range(1, n), 4)
         random_sample = [matrix[i] for i in indices]
 
@@ -124,6 +125,9 @@ def stich(reference, target):
     (target_keypoints, target_features) = extract_features_keypoints(target)
     all_matches = match_features(reference_features, target_features)
     good_matches = valid_matches(all_matches)
+    out = cv2.drawMatches(reference, reference_keypoints, target, target_keypoints, good_matches, None, matchColor=(0,255,0))
+    cv2.imwrite("Matches.png", out)
+    print("Hello")
     keypoint_matrix = correspondence_matrix(
         good_matches, reference_keypoints, target_keypoints)
     threshold = 1
@@ -136,11 +140,14 @@ def setReference(image, x_offset, y_offset, x, y):
     for i in range(image.shape[0]):
         for j in range(image.shape[1]):
             warped[i+x_offset][j+y_offset] = image[i][j]
+    print("Reference Image Set!")
     return warped
 
 
 def mywarp(output, target, x_offset, y_offset, H):
-    for i in range(target.shape[0]):
+    out = output.copy()
+    output_copy = np.zeros_like(output)
+    for i in tqdm(range(target.shape[0])):
         for j in range(target.shape[1]):
             computed = H.dot(np.asarray([j, i, 1]).T)
             computed = computed/computed[0, 2]
@@ -149,11 +156,19 @@ def mywarp(output, target, x_offset, y_offset, H):
             try:
                 for i1 in range(-1, 2):
                     for i2 in range(-1, 2):
+                        output_copy[y_c+x_offset+i1][x_c + y_offset+i2] = target[i, j]
                         output[y_c+x_offset+i1][x_c + y_offset+i2] = target[i, j]
             except:
                 continue
+    mask = out*output_copy
+    cv2.imwrite("mask.png", mask)
+    cv2.imwrite("panorama.png", output)
+    return mask,out, output_copy
+
 def mywarp_far(output, target, x_offset, y_offset, H):
-    for i in range(target.shape[0]):
+    out = output.copy()
+    output_copy = np.zeros_like(output)
+    for i in tqdm(range(target.shape[0])):
         for j in range(target.shape[1]):
             computed = H.dot(np.asarray([j, i, 1]).T)
             computed = computed/computed[0, 2]
@@ -162,6 +177,79 @@ def mywarp_far(output, target, x_offset, y_offset, H):
             try:
                 for i1 in range(-2, 3):
                     for i2 in range(-2, 3):
+                        output_copy[y_c+x_offset+i1][x_c + y_offset+i2] = target[i, j]
                         output[y_c+x_offset+i1][x_c + y_offset+i2] = target[i, j]
             except:
                 continue
+    mask = out*output_copy
+    cv2.imwrite("mask.png", mask)
+    cv2.imwrite("panorama.png", output)
+    return mask,out, output_copy
+
+def blend(output, B, mask, stichOnLeft, levels = 6):
+    mask = np.where(mask>0, 0, 1)
+    # A = output*mask
+    A = output
+    xmin, xmax = np.min(np.where(mask == 0)[1]), np.max(np.where(mask == 0)[1])
+    xmid = (xmin + xmax)//2
+    new_mask = np.zeros_like(output)
+    if stichOnLeft:
+        new_mask[:, xmid:, :] = 1
+    else:
+        new_mask[:, :xmid, :] = 1
+    cv2.imwrite("first.png", A)
+    cv2.imwrite("second.png", B)
+
+    G = A.copy()
+    gpA = [G]
+    for i in range(levels):
+        G = cv2.pyrDown(G)
+        gpA.append(G)
+
+    # generate Gaussian pyramid for B
+    G = B.copy()
+    gpB = [G]
+    for i in range(levels):
+        G = cv2.pyrDown(G)
+        gpB.append(G)
+
+    G = new_mask.copy()
+    gp_new = [G]
+    for i in range(1,levels):
+        G = cv2.pyrDown(G)
+        gp_new.append(G)
+
+    # generate Laplacian Pyramid for A
+    lpA = [gpA[levels-1]]
+    for i in range(levels-1,0,-1):
+        GE = cv2.pyrUp(gpA[i], dstsize=(gpA[i-1].shape[1], gpA[i-1].shape[0]))
+        L = cv2.subtract(gpA[i-1],GE)
+        lpA.append(L)
+
+    # generate Laplacian Pyramid for B
+    lpB = [gpB[levels-1]]
+    for i in range(levels-1,0,-1):
+        GE = cv2.pyrUp(gpB[i], dstsize=(gpB[i-1].shape[1], gpB[i-1].shape[0]))
+        L = cv2.subtract(gpB[i-1],GE)
+        lpB.append(L)
+    
+    # lpB = [gpB[levels-1]]
+    # for i in range(levels-1,0,-1):
+    #     GE = cv2.pyrUp(gpB[i], dstsize=(gpB[i-1].shape[1], gpB[i-1].shape[0]))
+    #     L = cv2.subtract(gpB[i-1],GE)
+    #     lpB.append(L)
+
+    LS = []
+    for la,lb,gp in zip(lpA,lpB, gp_new[::-1]):
+        # print(gp.shape)
+        # print(la.shape)
+        # rows,cols,dpt = la.shape
+        ls = gp*la + (1-gp)*lb
+        LS.append(ls)
+
+    # now reconstruct
+    ls_ = LS[0]
+    for i in range(1,levels):
+        ls_ = cv2.pyrUp(ls_, dstsize=(LS[i].shape[1], LS[i].shape[0]))
+        ls_ = cv2.add(ls_, LS[i])
+    return ls_
