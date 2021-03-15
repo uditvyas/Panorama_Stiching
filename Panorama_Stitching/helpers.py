@@ -5,19 +5,21 @@ import numpy as np
 import random
 from tqdm import tqdm
 
+# Function to extract SIFT like keypoints and corresponding descriptors from the image
 def extract_features_keypoints(image):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     orb = cv2.ORB_create()
     (Keypoints, features) = orb.detectAndCompute(image, None)
     return (Keypoints, features)
 
-
+# Function to match the Features in two images using Brute force, KNN matcher (default K = 2)
 def match_features(features1, features2, K=2):
     matcher = cv2.BFMatcher()
     matches = matcher.knnMatch(features1, features2, K)
     return matches
 
 
+# Function to find high confidence matches using the Lowe's ratio rule (default ratio test = 0.8)
 def valid_matches(matches, lowe_ratio=0.8):
     valid_matches = []
 
@@ -27,6 +29,7 @@ def valid_matches(matches, lowe_ratio=0.8):
     return valid_matches
 
 
+# Function to prepare the keypoints based on the matches, to feed as an input to the RANSAC Algorithm
 def correspondence_matrix(valid_matches, ref_keypoints, tar_keypoints):
     keypoints = []
 
@@ -37,7 +40,7 @@ def correspondence_matrix(valid_matches, ref_keypoints, tar_keypoints):
 
     return keypoints
 
-
+# Function to calculate a homography matrix from 4 samples provided, using SVD
 def calcH(sample):
     A = []
     for x, y, xx, yy in sample:
@@ -57,6 +60,7 @@ def calcH(sample):
     return H
 
 
+# Function to find error, by finding the difference between the projected value and the actual value
 def findError(matrixRow, H):
     point1 = np.transpose(np.array([matrixRow[0], matrixRow[1], 1]))
     point2 = np.array([matrixRow[2], matrixRow[3], 1])
@@ -65,8 +69,8 @@ def findError(matrixRow, H):
     error = point2 - estimate
     return np.linalg.norm(error)
 
-
-def get_homography(matrix, threshold, n_iter=1500):
+# Function implementing the RANSAC Algorithm ()
+def get_homography(matrix, n_iter=1500):
     inliers = []
     n = len(matrix)
     finalH = None
@@ -86,23 +90,20 @@ def get_homography(matrix, threshold, n_iter=1500):
             inliers = iteration_inliers
             finalH = H
 
-        # if len(inliers) > len(matrix)*threshold:
-        #     break
-    return finalH  # inliers
+    return finalH
 
-
+# Wrapper helper Function to find the Homography matrix
 def stich(reference, target):
     (reference_keypoints, reference_features) = extract_features_keypoints(reference)
     (target_keypoints, target_features) = extract_features_keypoints(target)
     all_matches = match_features(reference_features, target_features)
     good_matches = valid_matches(all_matches)
-    keypoint_matrix = correspondence_matrix(
-        good_matches, reference_keypoints, target_keypoints)
-    threshold = 1
+    keypoint_matrix = correspondence_matrix(good_matches, reference_keypoints, target_keypoints)
 
-    H = get_homography(keypoint_matrix, threshold)
+    H = get_homography(keypoint_matrix)
     return np.array(H)
 
+# Function to create an output image, and fix the reference image in the output image.
 def setReference(image, x_offset, y_offset, x, y):
     warped = np.zeros((x, y, 3))
     for i in range(image.shape[0]):
@@ -111,7 +112,9 @@ def setReference(image, x_offset, y_offset, x, y):
     print("Reference Image Set!")
     return warped
 
-
+# Function to warp an image, and add it to the output image generated using the previous function
+# This function also generates a mask of common values between the stitched image so far, and the new warped image
+# The function returns the original image, the separate warped image, and as well as the mask as the output
 def mywarp(output, target, x_offset, y_offset, H):
     out = output.copy()
     output_copy = np.zeros_like(output)
@@ -129,8 +132,10 @@ def mywarp(output, target, x_offset, y_offset, H):
             except:
                 continue
     mask = out*output_copy
-    return mask,out, output_copy
+    return mask, out, output_copy
 
+# This is an exact copy of the previous function. However, this function interpolates more than the previous one
+# This function can be used for images are farther away from the reference image
 def mywarp_far(output, target, x_offset, y_offset, H):
     out = output.copy()
     output_copy = np.zeros_like(output)
@@ -150,18 +155,22 @@ def mywarp_far(output, target, x_offset, y_offset, H):
     mask = out*output_copy
     return mask,out, output_copy
 
-def blend(output, B, mask, stichOnLeft, levels = 6):
+# This function is used to blend the newly warped image and the existing stiched image
+# It makes use of the Image pyraminds to estimate Gaussian and Laplacian pyramids of the two images
+# and makes used the mask generated in the previous step, to reconstruct the images in order to blend them
+def blend(A, B, mask, stichOnLeft, levels = 6):
     mask = np.where(mask>0, 0, 1)
-    # A = output*mask
-    A = output
     xmin, xmax = np.min(np.where(mask == 0)[1]), np.max(np.where(mask == 0)[1])
     xmid = (xmin + xmax)//2
-    new_mask = np.zeros_like(output)
+    new_mask = np.zeros_like(A)
+    
+    # This is conditional to the stitch being on the right side, or the left side of the reference image.
     if stichOnLeft:
         new_mask[:, xmid:, :] = 1
     else:
         new_mask[:, :xmid, :] = 1
 
+    # generate Gaussian pyramid for A
     G = A.copy()
     gpA = [G]
     for i in range(levels):
@@ -175,6 +184,7 @@ def blend(output, B, mask, stichOnLeft, levels = 6):
         G = cv2.pyrDown(G)
         gpB.append(G)
 
+    # generate Gaussian pyramid for the mask
     G = new_mask.copy()
     gp_new = [G]
     for i in range(1,levels):
@@ -194,24 +204,15 @@ def blend(output, B, mask, stichOnLeft, levels = 6):
         GE = cv2.pyrUp(gpB[i], dstsize=(gpB[i-1].shape[1], gpB[i-1].shape[0]))
         L = cv2.subtract(gpB[i-1],GE)
         lpB.append(L)
-    
-    # lpB = [gpB[levels-1]]
-    # for i in range(levels-1,0,-1):
-    #     GE = cv2.pyrUp(gpB[i], dstsize=(gpB[i-1].shape[1], gpB[i-1].shape[0]))
-    #     L = cv2.subtract(gpB[i-1],GE)
-    #     lpB.append(L)
 
     LS = []
     for la,lb,gp in zip(lpA,lpB, gp_new[::-1]):
-        # print(gp.shape)
-        # print(la.shape)
-        # rows,cols,dpt = la.shape
         ls = gp*la + (1-gp)*lb
         LS.append(ls)
 
     # now reconstruct
-    ls_ = LS[0]
+    result = LS[0]
     for i in range(1,levels):
-        ls_ = cv2.pyrUp(ls_, dstsize=(LS[i].shape[1], LS[i].shape[0]))
-        ls_ = cv2.add(ls_, LS[i])
-    return ls_
+        result = cv2.pyrUp(result, dstsize=(LS[i].shape[1], LS[i].shape[0]))
+        result = cv2.add(result, LS[i])
+    return result
