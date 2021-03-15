@@ -4,8 +4,6 @@ import cv2
 import numpy as np
 import random
 from tqdm import tqdm
-# Part 1: Detect, extract, and match features
-
 
 def extract_features_keypoints(image):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -68,7 +66,7 @@ def findError(matrixRow, H):
     return np.linalg.norm(error)
 
 
-def get_homography(matrix, threshold, n_iter=500):
+def get_homography(matrix, threshold, n_iter=1500):
     inliers = []
     n = len(matrix)
     finalH = None
@@ -93,47 +91,17 @@ def get_homography(matrix, threshold, n_iter=500):
     return finalH  # inliers
 
 
-def warpimage(image1, image2, x_offset, y_offset, x, y, H12):
-
-    img1 = image1
-    img2 = image2
-
-    img_temp = np.zeros((x, y, 3))
-
-    for i in range(img1.shape[0]):
-        for j in range(img1.shape[1]):
-            # img_temp[i+x_offset][j+y_offset] = img1[i][j]
-            img_temp[i+x_offset][j+y_offset] = img1[i][j]
-
-    for i in range(img1.shape[0]):
-        for j in range(img1.shape[1]):
-            point = np.array([j, i, 1])
-            estimate = np.dot(H12, point)
-            x_c = int(estimate[0, 0])
-            y_c = int(estimate[0, 1])
-            try:
-                for i1 in range(-1, 2):
-                    for i2 in range(-1, 2):
-                        img_temp[y_c+x_offset+i1][x_c+i2] = img2[i, j]
-            except:
-                continue
-    return img_temp
-
-
 def stich(reference, target):
     (reference_keypoints, reference_features) = extract_features_keypoints(reference)
     (target_keypoints, target_features) = extract_features_keypoints(target)
     all_matches = match_features(reference_features, target_features)
     good_matches = valid_matches(all_matches)
-    out = cv2.drawMatches(reference, reference_keypoints, target, target_keypoints, good_matches, None, matchColor=(0,255,0))
-    cv2.imwrite("Matches.png", out)
-    print("Hello")
     keypoint_matrix = correspondence_matrix(
         good_matches, reference_keypoints, target_keypoints)
     threshold = 1
 
     H = get_homography(keypoint_matrix, threshold)
-    return H
+    return np.array(H)
 
 def setReference(image, x_offset, y_offset, x, y):
     warped = np.zeros((x, y, 3))
@@ -150,9 +118,9 @@ def mywarp(output, target, x_offset, y_offset, H):
     for i in tqdm(range(target.shape[0])):
         for j in range(target.shape[1]):
             computed = H.dot(np.asarray([j, i, 1]).T)
-            computed = computed/computed[0, 2]
-            x_c = int(computed[0, 0])
-            y_c = int(computed[0, 1])
+            computed = computed/computed[2]
+            x_c = int(computed[0])        
+            y_c = int(computed[1])
             try:
                 for i1 in range(-1, 2):
                     for i2 in range(-1, 2):
@@ -161,8 +129,6 @@ def mywarp(output, target, x_offset, y_offset, H):
             except:
                 continue
     mask = out*output_copy
-    cv2.imwrite("mask.png", mask)
-    cv2.imwrite("panorama.png", output)
     return mask,out, output_copy
 
 def mywarp_far(output, target, x_offset, y_offset, H):
@@ -171,9 +137,9 @@ def mywarp_far(output, target, x_offset, y_offset, H):
     for i in tqdm(range(target.shape[0])):
         for j in range(target.shape[1]):
             computed = H.dot(np.asarray([j, i, 1]).T)
-            computed = computed/computed[0, 2]
-            x_c = int(computed[0, 0])
-            y_c = int(computed[0, 1])
+            computed = computed/computed[2]
+            x_c = int(computed[0])     
+            y_c = int(computed[1])
             try:
                 for i1 in range(-2, 3):
                     for i2 in range(-2, 3):
@@ -182,8 +148,6 @@ def mywarp_far(output, target, x_offset, y_offset, H):
             except:
                 continue
     mask = out*output_copy
-    cv2.imwrite("mask.png", mask)
-    cv2.imwrite("panorama.png", output)
     return mask,out, output_copy
 
 def blend(output, B, mask, stichOnLeft, levels = 6):
@@ -197,8 +161,6 @@ def blend(output, B, mask, stichOnLeft, levels = 6):
         new_mask[:, xmid:, :] = 1
     else:
         new_mask[:, :xmid, :] = 1
-    cv2.imwrite("first.png", A)
-    cv2.imwrite("second.png", B)
 
     G = A.copy()
     gpA = [G]
