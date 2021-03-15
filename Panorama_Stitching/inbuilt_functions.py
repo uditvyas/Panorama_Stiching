@@ -22,13 +22,13 @@ image4 = cv2.resize(image4, (800,600))
 # image4 = cv2.imread("inputImages/I2/2_4.JPG")
 # out = 2
 
-# SET 3
+# SET 3 - Comment the lines 96-98 to avoid errors
 # image2 = cv2.imread("inputImages/I3/3_3.JPG")
 # image3 = cv2.imread("inputImages/I3/3_4.JPG")
 # image4 = cv2.imread("inputImages/I3/3_5.JPG")
 # out = 3
 
-# SET 4
+# SET 4 - Make sure lines 96-98 are back to uncommented mode
 # image1 = cv2.imread("inputImages/I4/DSC02930.JPG")
 # image2 = cv2.imread("inputImages/I4/DSC02931.JPG")
 # image3 = cv2.imread("inputImages/I4/DSC02932.JPG")
@@ -55,7 +55,10 @@ image4 = cv2.resize(image4, (800,600))
 # image3 = cv2.resize(image3, (800,600))
 # image4 = cv2.resize(image4, (800,600))
 
-# SET 6
+# # SET 6 = Make sure to Uncomment lines 118-119, and Comment 112-115
+# This is done as the sequence of the input image in the actual scene is different that the underlying assumption of the code
+# Make sure the UNDO the changes, once this SET is completed 
+
 # image1 = cv2.imread("inputImages/I6/1_1.JPG")
 # image2 = cv2.imread("inputImages/I6/1_2.JPG")
 # image3 = cv2.imread("inputImages/I6/1_3.JPG")
@@ -85,7 +88,7 @@ def findH(A, B):
 #### Part 2: Preparing the Output Image
 height = int(3*image2.shape[0])
 width = 5*image2.shape[1]
-x_offset = int(image2.shape[1])
+x_offset = int(1.5*image2.shape[1])
 y_offset = int(image2.shape[0])
 output = setReference(image2, x_offset, y_offset, height, width)
 
@@ -111,7 +114,7 @@ output = blend(original, warped, mask, stichOnLeft=0)
 # For SET 1 to 5
 H43 = findH(image4, image3)
 H42 = np.dot(H43, H32)
-mask, original, warped =  mywarp_far(output, image4, x_offset, y_offset, H42)
+mask, original, warped =  mywarp(output, image4, x_offset, y_offset, H42)
 output = blend(original, warped, mask, stichOnLeft=0)
 
 # FOR SET - 6

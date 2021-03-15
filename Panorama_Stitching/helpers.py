@@ -120,6 +120,8 @@ def mywarp(output, target, x_offset, y_offset, H):
     output_copy = np.zeros_like(output)
     h = target.shape[0]
     w = target.shape[1]
+    
+    # Finding the bounding rectange in the transformed plane.
     corners = [[0,0,1],[h-1,0,1],[0,w-1,1],[h-1,w-1,1]]
     transform_corners = np.array([H.dot(np.array(corner).T) for corner in corners])
     transform_corners = [corner/corner[2] for corner in transform_corners]
@@ -133,6 +135,8 @@ def mywarp(output, target, x_offset, y_offset, H):
     ymax = min(ymax + y_offset, output_copy.shape[0])
 
     invH = np.linalg.inv(H)
+    
+    # Reverse mapping the points in the transformed plane to check if they lie in the original images
     for j in tqdm(range(ymin,ymax)):
         for i in range(xmin,xmax):
             point = np.array([i,j,1]).T
