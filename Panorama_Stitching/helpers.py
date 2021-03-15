@@ -108,7 +108,7 @@ def setReference(image, x_offset, y_offset, x, y):
     warped = np.zeros((x, y, 3))
     for i in range(image.shape[0]):
         for j in range(image.shape[1]):
-            warped[i+x_offset][j+y_offset] = image[i][j]
+            warped[i+y_offset][j+x_offset] = image[i][j]
     print("Reference Image Set!")
     return warped
 
@@ -118,42 +118,37 @@ def setReference(image, x_offset, y_offset, x, y):
 def mywarp(output, target, x_offset, y_offset, H):
     out = output.copy()
     output_copy = np.zeros_like(output)
-    for i in tqdm(range(target.shape[0])):
-        for j in range(target.shape[1]):
-            computed = H.dot(np.asarray([j, i, 1]).T)
-            computed = computed/computed[2]
-            x_c = int(computed[0])        
-            y_c = int(computed[1])
-            try:
-                for i1 in range(-1, 2):
-                    for i2 in range(-1, 2):
-                        output_copy[y_c+x_offset+i1][x_c + y_offset+i2] = target[i, j]
-                        output[y_c+x_offset+i1][x_c + y_offset+i2] = target[i, j]
-            except:
-                continue
+    h = target.shape[0]
+    w = target.shape[1]
+    corners = [[0,0,1],[h-1,0,1],[0,w-1,1],[h-1,w-1,1]]
+    transform_corners = np.array([H.dot(np.array(corner).T) for corner in corners])
+    transform_corners = [corner/corner[2] for corner in transform_corners]
+    xs = [corner[1] for corner in transform_corners]
+    ys = [corner[0] for corner in transform_corners]
+    xmin, xmax = int(np.min(xs)), int(np.max(xs))+1
+    xmin = max(xmin, -x_offset)
+    xmax = min(xmax + x_offset, output_copy.shape[1])
+    ymin, ymax = int(np.min(ys)), int(np.max(ys))+1
+    ymin = min(ymin, -y_offset)
+    ymax = min(ymax + y_offset, output_copy.shape[0])
+
+    invH = np.linalg.inv(H)
+    for j in tqdm(range(ymin,ymax)):
+        for i in range(xmin,xmax):
+            point = np.array([i,j,1]).T
+            inverse = invH.dot(point)
+            inverse = inverse/inverse[2]
+            x = int(inverse[0])
+            y = int(inverse[1])
+
+            if x in range(0,w) and y in range(0,h):
+                try:
+                    output_copy[j + y_offset][i + x_offset] = target[y][x]
+                    output[j + y_offset][i + x_offset] = target[y][x]
+                except:
+                    continue
     mask = out*output_copy
     return mask, out, output_copy
-
-# This is an exact copy of the previous function. However, this function interpolates more than the previous one
-# This function can be used for images are farther away from the reference image
-def mywarp_far(output, target, x_offset, y_offset, H):
-    out = output.copy()
-    output_copy = np.zeros_like(output)
-    for i in tqdm(range(target.shape[0])):
-        for j in range(target.shape[1]):
-            computed = H.dot(np.asarray([j, i, 1]).T)
-            computed = computed/computed[2]
-            x_c = int(computed[0])     
-            y_c = int(computed[1])
-            try:
-                for i1 in range(-2, 3):
-                    for i2 in range(-2, 3):
-                        output_copy[y_c+x_offset+i1][x_c + y_offset+i2] = target[i, j]
-                        output[y_c+x_offset+i1][x_c + y_offset+i2] = target[i, j]
-            except:
-                continue
-    mask = out*output_copy
-    return mask,out, output_copy
 
 # This function is used to blend the newly warped image and the existing stiched image
 # It makes use of the Image pyraminds to estimate Gaussian and Laplacian pyramids of the two images

@@ -73,7 +73,7 @@ image4 = cv2.resize(image4, (800,600))
 
 height = int(3*image2.shape[0])
 width = 5*image2.shape[1]
-x_offset = int(image2.shape[1])
+x_offset = int(1.5*image2.shape[1])
 y_offset = int(image2.shape[0])
 output = setReference(image2, x_offset, y_offset, height, width)
 
@@ -100,7 +100,7 @@ output = blend(original, warped, mask, stichOnLeft=0)
 # For SET 1 to 5
 H43 = stich(image4, image3)
 H42 = np.dot(H43, H32)
-mask, original, warped =  mywarp_far(output, image4, x_offset, y_offset, H42)
+mask, original, warped =  mywarp(output, image4, x_offset, y_offset, H42)
 output = blend(original, warped, mask, stichOnLeft=0)
 
 # FOR SET - 6
