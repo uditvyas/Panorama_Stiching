@@ -17,3 +17,21 @@ Steps to run the code:
 The results will be stored in the directories results, and inbuilt_results for main.py and inbuilt_functions.py respectively. 
 
 All the helper functions for both the files have been included in the helper.py file.
+
+
+
+
+
+Instructions for the Jupyter Notebook 
+Steps to run the code:
+
+1. The python file is Assignment_1_18110176.ipynb
+2. In order to run the code, first create a new virtualenv, and install the dependencies (optional, may avoid if they are preinstalled).
+3. Now check the Jupyter notebook file.
+    - Make sure to connect to the appropriate Runtime (Virtualenv or any other)
+    - Run all the cells with the helper functions
+    - At the end of these cells, there is a cell to display the output for each set given in the assignment.
+    - The cell will simultanously generate two results, one using the selfmade functions, and the other using the Inbuilt functions
+4. The results will be stored in the "results/" directory that will be automatically created, corresponding to each input set. The results of the inbuilt functions will be stored in the "inbuilts_results/" directory.
+
+There are some exceptions as explained in the report. All of them have been taken care of in the code on its own. No explicit changes are required for any set.
